@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## About Austin
+
+Austin is non-technical. He does not write or review code directly. Claude is responsible for all GitHub actions — creating branches, committing, pushing, and opening PRs. Never ask Austin to run git commands manually.
+
+---
+
 ## Source of truth
 
 **Always read `BUILD_PLAN.md` at the start of every session.** It is the authoritative specification for what we're building, the tech stack, and the phased roadmap. If anything here conflicts with `BUILD_PLAN.md`, `BUILD_PLAN.md` wins. Ask Austin before guessing on ambiguities.
