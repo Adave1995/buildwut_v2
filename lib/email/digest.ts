@@ -79,7 +79,7 @@ export async function sendDailyDigest(
 
   try {
     const { error } = await resend.emails.send({
-      from: 'BuildWut <digest@buildwut.app>',
+      from: 'BuildWut <noreply@buildwut.ai>',
       to,
       subject: `BuildWut digest — ${date}`,
       html: buildHtml(opportunities, date),
