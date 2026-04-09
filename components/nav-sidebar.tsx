@@ -1,10 +1,13 @@
 import Link from 'next/link'
-import { LayoutDashboard, Kanban, Bookmark, Rss, Settings } from 'lucide-react'
+import { Suspense } from 'react'
+import { LayoutDashboard, Kanban, Bookmark, Rss, Settings, Bell } from 'lucide-react'
+import { AlertBadge } from '@/components/alert-badge'
 
 const navItems = [
   { href: '/feed', label: 'Feed', icon: LayoutDashboard },
   { href: '/pipeline', label: 'Pipeline', icon: Kanban },
   { href: '/watchlists', label: 'Watchlists', icon: Bookmark },
+  { href: '/alerts', label: 'Alerts', icon: Bell, badge: true },
   { href: '/sources', label: 'Sources', icon: Rss },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
@@ -24,6 +27,11 @@ export function NavSidebar() {
           >
             <item.icon className="size-4 shrink-0" />
             {item.label}
+            {item.badge && (
+              <Suspense fallback={null}>
+                <AlertBadge />
+              </Suspense>
+            )}
           </Link>
         ))}
       </nav>

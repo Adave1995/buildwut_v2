@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { db } from '@/lib/db'
-import { entity, scoreSnapshot, pipelineItem, watchlist } from '@/lib/db/schema'
-import { eq, desc, and } from 'drizzle-orm'
+import { entity, scoreSnapshot, pipelineItem, watchlist, metricTimeseries } from '@/lib/db/schema'
+import { eq, desc, and, gte } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NotesEditor } from '@/components/notes-editor'
 import { AddToWatchlistDialog } from '@/components/add-to-watchlist-dialog'
+import { SignalsChart } from '@/components/signals-chart'
 import { addToPipeline } from '@/lib/actions/pipeline'
 import type { AdjacentNiche, Evidence } from '@/lib/db/schema'
 
@@ -49,6 +50,37 @@ async function getOpportunity(entityId: string, userId: string | undefined) {
   }
 
   return { entity: entityRow, score: score ?? null, pipelineRow, userWatchlists }
+}
+
+async function getSignals(entityId: string) {
+  const since = new Date()
+  since.setDate(since.getDate() - 30)
+
+  const rows = await db
+    .select()
+    .from(metricTimeseries)
+    .where(and(eq(metricTimeseries.entityId, entityId), gte(metricTimeseries.t, since)))
+    .orderBy(metricTimeseries.t)
+
+  // Pivot: collect unique metric names, then group by timestamp bucket (day)
+  const metricSet = new Set<string>()
+  const byDay = new Map<string, Record<string, number>>()
+
+  for (const row of rows) {
+    metricSet.add(row.metricName)
+    const day = row.t.toISOString().slice(0, 10)
+    const existing = byDay.get(day) ?? {}
+    // Take latest value per metric per day
+    existing[row.metricName] = Number(row.value)
+    byDay.set(day, existing)
+  }
+
+  const metrics = Array.from(metricSet)
+  const data = Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([t, vals]) => ({ t, ...vals }))
+
+  return { data, metrics }
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
@@ -93,7 +125,10 @@ export default async function OpportunityPage({
     data: { user },
   } = await supabase.auth.getUser()
 
-  const data = await getOpportunity(id, user?.id)
+  const [data, signals] = await Promise.all([
+    getOpportunity(id, user?.id),
+    getSignals(id),
+  ])
   if (!data) notFound()
 
   const { entity: e, score, pipelineRow, userWatchlists } = data
@@ -184,6 +219,7 @@ export default async function OpportunityPage({
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="signals">Signals</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
           </TabsList>
 
@@ -307,6 +343,18 @@ export default async function OpportunityPage({
                 </Card>
               ))
             )}
+          </TabsContent>
+
+          {/* ── Signals tab ── */}
+          <TabsContent value="signals">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Signal history — last 30 days</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SignalsChart data={signals.data} metrics={signals.metrics} />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ── Notes tab ── */}
