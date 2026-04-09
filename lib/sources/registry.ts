@@ -14,14 +14,15 @@ export interface SourceDefinition {
   ingest: () => Promise<IngestResult>
 }
 
-// Lazy import to avoid loading DB/fetch dependencies at registry import time in test/build
+// Lazy imports to avoid loading DB/fetch dependencies at registry import time in test/build
 import { run as runHackerNews } from '@/lib/ingest/hn'
-
-const notImplemented = async (): Promise<IngestResult> => ({
-  ok: false,
-  itemsIngested: 0,
-  errors: ['Not implemented'],
-})
+import { run as runReddit } from '@/lib/ingest/reddit'
+import { run as runIndieHackers } from '@/lib/ingest/indiehackers'
+import { run as runAppleRss } from '@/lib/ingest/apple-rss'
+import { run as runGithub } from '@/lib/ingest/github'
+import { run as runProductHunt } from '@/lib/ingest/producthunt'
+import { run as runXTwitter } from '@/lib/ingest/x-twitter'
+import { run as runGoogleTrends } from '@/lib/ingest/google-trends'
 
 const sources: SourceDefinition[] = [
   {
@@ -36,38 +37,47 @@ const sources: SourceDefinition[] = [
   {
     id: 'reddit',
     name: 'Reddit',
-    enabled: false,
+    enabled: true,
     cadenceCron: '0 * * * *',
     rateLimit: { requests: 60, perSeconds: 60 },
     licensingState: 'free',
-    ingest: notImplemented,
+    ingest: runReddit,
   },
   {
-    id: 'producthunt',
-    name: 'Product Hunt',
-    enabled: false,
+    id: 'indiehackers',
+    name: 'Indie Hackers',
+    enabled: true,
     cadenceCron: '0 */6 * * *',
-    rateLimit: { requests: 100, perSeconds: 900 },
-    licensingState: 'personal-only',
-    ingest: notImplemented,
-  },
-  {
-    id: 'github',
-    name: 'GitHub Trending',
-    enabled: false,
-    cadenceCron: '0 8 * * *',
-    rateLimit: { requests: 5000, perSeconds: 3600 },
+    rateLimit: { requests: 60, perSeconds: 60 },
     licensingState: 'free',
-    ingest: notImplemented,
+    ingest: runIndieHackers,
   },
   {
     id: 'apple-rss',
     name: 'Apple App Store RSS',
-    enabled: false,
+    enabled: true,
     cadenceCron: '0 9 * * *',
     rateLimit: { requests: 100, perSeconds: 3600 },
     licensingState: 'free',
-    ingest: notImplemented,
+    ingest: runAppleRss,
+  },
+  {
+    id: 'github',
+    name: 'GitHub Trending',
+    enabled: true,
+    cadenceCron: '0 8 * * *',
+    rateLimit: { requests: 5000, perSeconds: 3600 },
+    licensingState: 'free',
+    ingest: runGithub,
+  },
+  {
+    id: 'producthunt',
+    name: 'Product Hunt',
+    enabled: true,
+    cadenceCron: '0 */6 * * *',
+    rateLimit: { requests: 100, perSeconds: 900 },
+    licensingState: 'personal-only',
+    ingest: runProductHunt,
   },
   {
     id: 'x-twitter',
@@ -76,7 +86,7 @@ const sources: SourceDefinition[] = [
     cadenceCron: '0 */2 * * *',
     rateLimit: { requests: 500000, perSeconds: 2592000 },
     licensingState: 'licensed',
-    ingest: notImplemented,
+    ingest: runXTwitter,
   },
   {
     id: 'google-trends',
@@ -85,16 +95,7 @@ const sources: SourceDefinition[] = [
     cadenceCron: '0 10 * * *',
     rateLimit: { requests: 10, perSeconds: 60 },
     licensingState: 'restricted',
-    ingest: notImplemented,
-  },
-  {
-    id: 'indiehackers',
-    name: 'Indie Hackers',
-    enabled: false,
-    cadenceCron: '0 */6 * * *',
-    rateLimit: { requests: 60, perSeconds: 60 },
-    licensingState: 'free',
-    ingest: notImplemented,
+    ingest: runGoogleTrends,
   },
 ]
 

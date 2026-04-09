@@ -120,7 +120,6 @@ function FeedCard({ row }: { row: FeedRow }) {
               <span
                 className="truncate max-w-[200px]"
                 title={row.entityUrl}
-                onClick={(e) => e.preventDefault()}
               >
                 {row.entityUrl.replace(/^https?:\/\//, '')}
               </span>
