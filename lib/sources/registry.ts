@@ -82,7 +82,7 @@ const sources: SourceDefinition[] = [
   {
     id: 'x-twitter',
     name: 'X / Twitter',
-    enabled: false,
+    enabled: true,
     cadenceCron: '0 */2 * * *',
     rateLimit: { requests: 500000, perSeconds: 2592000 },
     licensingState: 'licensed',
@@ -91,7 +91,7 @@ const sources: SourceDefinition[] = [
   {
     id: 'google-trends',
     name: 'Google Trends',
-    enabled: false,
+    enabled: true,
     cadenceCron: '0 10 * * *',
     rateLimit: { requests: 10, perSeconds: 60 },
     licensingState: 'restricted',
