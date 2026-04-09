@@ -559,11 +559,24 @@ SENTRY_DSN=
 
 ---
 
-## 13. Phased roadmap
+## 13. Infra decisions made during build (override any conflicting assumptions above)
+
+| Topic | Decision | Reason |
+|---|---|---|
+| Cron scheduling | **cron-job.com** (not Vercel cron) | Vercel Hobby plan only allows 1 daily cron; cron-job.com is free and sends custom headers |
+| DATABASE_URL | **Transaction Pooler** port 6543 | Designed for serverless; direct connection (port 5432) exhausts Supabase connection limits |
+| Supabase redirect URLs | Must be whitelisted in Supabase → Auth → URL Configuration | Magic link breaks silently if production domain isn't in the allowlist |
+| Product Hunt API | Austin has client ID (`PRODUCT_HUNT_API_KEY`) + secret (`PRODUCT_HUNT_API_SECRET`) | PH connector must do OAuth2 client_credentials exchange to get bearer token at runtime |
+| X extra keys | `X_SECRET_KEY` + `X_CONSUMER_KEY` exist in env | OAuth 1.0a keys from X app registration; not needed for Bearer Token search in V1 |
+| Vercel function timeout | Export `maxDuration = 10` on all cron routes | Hobby plan hard limit is 10s; ingest functions must budget time and stop gracefully |
+
+---
+
+## 14. Phased roadmap
 
 **Don't try to build everything at once.** Build in this order. Each phase should be deployed to Vercel and used by Austin before starting the next.
 
-### Phase 0 — Project setup (Day 1)
+### Phase 0 — Project setup ✅ COMPLETE (2026-04-08)
 
 - `pnpm create next-app` with TypeScript, Tailwind, App Router
 - Install: drizzle-orm, postgres, @anthropic-ai/sdk, @supabase/supabase-js, @supabase/ssr, zod, shadcn/ui
@@ -574,7 +587,7 @@ SENTRY_DSN=
 - Deploy a "hello world" page to Vercel
 - Verify auth flow works end-to-end (magic link → protected page)
 
-### Phase 1 — Ingest one source, end-to-end (Days 2–4)
+### Phase 1 — Ingest one source, end-to-end ✅ COMPLETE (2026-04-08)
 
 - Implement the source registry pattern
 - Implement only the **Hacker News** connector (it's the simplest and most signal-dense)
@@ -583,7 +596,7 @@ SENTRY_DSN=
 - Build the `/sources` health page so Austin can see it working
 - **Acceptance:** every 30 minutes, new HN Show HN posts appear as `entity` rows. No errors. Source health page shows green.
 
-### Phase 2 — AI scoring + minimal feed (Days 5–8)
+### Phase 2 — AI scoring + minimal feed (Days 5–8) ← NEXT
 
 - Implement metric computation cron (just `mentions_24h` and `hn_score` for now)
 - Implement the scoring engine with the v1 prompt

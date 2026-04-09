@@ -6,7 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Source of truth
 
-**Always read `build_plan.md` at the start of every session.** It is the authoritative specification for what we're building, the tech stack, and the phased roadmap. If anything here conflicts with `build_plan.md`, `build_plan.md` wins. Ask Austin before guessing on ambiguities.
+**Always read `BUILD_PLAN.md` at the start of every session.** It is the authoritative specification for what we're building, the tech stack, and the phased roadmap. If anything here conflicts with `BUILD_PLAN.md`, `BUILD_PLAN.md` wins. Ask Austin before guessing on ambiguities.
+
+---
+
+## Current status (updated 2026-04-08)
+
+- **Phase 0 (foundation)** — complete and deployed
+- **Phase 1 (HN ingest + sources health page)** — complete and live at https://buildwut-v2-6ywc.vercel.app
+- **Phase 2 (scoring engine + feed)** — next
 
 ---
 
@@ -27,8 +35,8 @@ pnpm db:generate            # drizzle-kit generate → outputs SQL to /supabase/
 pnpm db:push                # apply migration to Supabase (or use Supabase SQL editor)
 
 # Tests (resolver unit tests are mandatory; run them before merging)
-pnpm test                   # vitest (or jest, whichever is configured)
-pnpm test src/lib/ingest/resolver.test.ts   # run a single test file
+pnpm test                   # vitest
+pnpm test lib/ingest/resolver.test.ts   # run resolver tests specifically
 ```
 
 ---
@@ -85,6 +93,10 @@ Every cron route must:
 4. Write a `source_run` row **regardless of outcome** (this is what `/sources` reads)
 5. Return `{ok, itemsIngested, durationMs}`
 
+**Scheduling: cron-job.com, not Vercel cron.** Vercel Hobby plan only allows 1 daily cron job — all scheduling is handled by cron-job.com (free). Each cron route is a standard GET handler protected by `CRON_SECRET`. The cron-job.com job sends `Authorization: Bearer {CRON_SECRET}` as a custom header.
+
+New cron routes must also be added as jobs in cron-job.com manually.
+
 X API and Google Trends sources start with `enabled: false` in the registry. Enable manually after confirming they work without errors.
 
 ---
@@ -96,8 +108,19 @@ X API and Google Trends sources start with `enabled: false` in the registry. Ena
 - **Grok is enrichment-only** — it never produces a score. Claude produces all scores.
 - **Score at most ~50 entities/day** in V1. Check daily budget before calling Claude.
 - **Rate limits are sacred** — never exceed any source's documented limit. Use token bucket or simple sleep between requests.
+- **Vercel Hobby function limit is 10 seconds.** Ingest functions must include a time budget and stop gracefully before hitting it. Export `maxDuration = 10` on every cron route.
 - **Secrets never logged.** Sentry scrubbing must be configured.
 - Always work on a feature branch, never commit directly to `main`.
+
+---
+
+## Infrastructure decisions (locked)
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Cron scheduling | **cron-job.com** | Vercel Hobby only allows 1 daily cron |
+| DATABASE_URL | **Transaction Pooler** (port 6543) | Serverless-safe; direct connection exhausts Supabase limits |
+| Auth | Supabase magic link | Redirect URL must be whitelisted in Supabase → Authentication → URL Configuration |
 
 ---
 
@@ -106,6 +129,18 @@ X API and Google Trends sources start with `enabled: false` in the registry. Ena
 See `.env.example` for the full list. Key groupings:
 - Supabase: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
 - AI: `ANTHROPIC_API_KEY`, `XAI_API_KEY`
-- Sources: `X_API_BEARER_TOKEN`, `PRODUCT_HUNT_API_TOKEN`, `GITHUB_PERSONAL_ACCESS_TOKEN`
+- Sources: `X_API_BEARER_TOKEN`, `PRODUCT_HUNT_API_KEY`, `PRODUCT_HUNT_API_SECRET`, `GITHUB_PERSONAL_ACCESS_TOKEN`
+- X OAuth (future use): `X_SECRET_KEY`, `X_CONSUMER_KEY`
 - Infra: `CRON_SECRET`, `ALLOWED_SIGNUP_EMAILS`, `SENTRY_DSN`
 - Reddit and Google Trends require **no API keys**.
+
+**Product Hunt note:** Austin has OAuth2 client credentials (`PRODUCT_HUNT_API_KEY` = client ID, `PRODUCT_HUNT_API_SECRET` = client secret). The PH connector must exchange these for a bearer token at runtime before calling the GraphQL API.
+
+---
+
+## Supabase setup checklist (for new environments)
+
+1. Run migration: `supabase/migrations/0000_steady_mongoose.sql` in SQL editor
+2. Enable pg_trgm: `CREATE EXTENSION IF NOT EXISTS pg_trgm;`
+3. Set Site URL in Authentication → URL Configuration
+4. Add redirect URL: `https://{your-domain}/api/auth/callback`
