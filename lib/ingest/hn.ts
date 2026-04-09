@@ -5,8 +5,13 @@ import { resolveEntity } from './resolver'
 import type { IngestResult } from '@/lib/sources/registry'
 
 const HN_BASE = 'https://hacker-news.firebaseio.com/v0'
-const MAX_IDS_PER_ENDPOINT = 100
-const ITEM_FETCH_DELAY_MS = 50
+// Keep batch small so the function finishes well within Vercel's 10s limit.
+// Every 30 min only a handful of new stories appear anyway; on the first-ever
+// run we'll just catch up over a few executions.
+const MAX_IDS_PER_ENDPOINT = 30
+const CONCURRENT_ITEM_FETCHES = 5
+// Stop processing new items 2 seconds before the hard deadline
+const TIME_BUDGET_MS = 8_000
 
 type HnItem = {
   id: number
@@ -40,11 +45,58 @@ async function fetchItem(id: number): Promise<HnItem | null> {
   return res.json() as Promise<HnItem>
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+async function processItem(id: number, errors: string[]): Promise<boolean> {
+  try {
+    const item = await fetchItem(id)
+    if (!item || item.deleted || item.dead || item.type !== 'story' || !item.title) {
+      return false
+    }
+
+    const isShowHn = /^show hn:/i.test(item.title)
+    const entityName = isShowHn ? item.title.replace(/^show hn:\s*/i, '').trim() : item.title
+
+    let entityId: string | null = null
+    if (item.url || isShowHn) {
+      try {
+        entityId = await resolveEntity({
+          name: entityName,
+          url: item.url,
+          externalIds: { hackernews: String(item.id) },
+        })
+      } catch (resolveErr) {
+        errors.push(`resolve failed for HN ${id}: ${String(resolveErr)}`)
+      }
+    }
+
+    await db
+      .insert(rawObservation)
+      .values({
+        entityId,
+        sourceId: 'hackernews',
+        sourceEventId: String(item.id),
+        eventType: isShowHn ? 'launch' : 'mention',
+        payload: {
+          hn_id: item.id,
+          title: item.title,
+          url: item.url ?? null,
+          score: item.score ?? 0,
+          author: item.by ?? null,
+          comments_count: item.descendants ?? 0,
+          is_show_hn: isShowHn,
+        },
+        observedAt: new Date(item.time * 1000),
+      })
+      .onConflictDoNothing()
+
+    return true
+  } catch (err) {
+    errors.push(`failed to process HN item ${id}: ${String(err)}`)
+    return false
+  }
 }
 
 export async function run(): Promise<IngestResult> {
+  const startedAt = Date.now()
   const errors: string[] = []
   let itemsIngested = 0
 
@@ -65,7 +117,7 @@ export async function run(): Promise<IngestResult> {
     return { ok: true, itemsIngested: 0, errors: [] }
   }
 
-  // 2. Find which IDs we haven't ingested yet (avoids re-fetching items)
+  // 2. Find which IDs we haven't ingested yet
   const allIdStrings = allIds.map(String)
   const existing = await db
     .select({ sourceEventId: rawObservation.sourceEventId })
@@ -80,59 +132,16 @@ export async function run(): Promise<IngestResult> {
   const existingSet = new Set(existing.map((r) => r.sourceEventId))
   const unprocessed = allIds.filter((id) => !existingSet.has(String(id)))
 
-  // 3. Fetch and ingest each new item
-  for (const id of unprocessed) {
-    try {
-      await sleep(ITEM_FETCH_DELAY_MS)
-
-      const item = await fetchItem(id)
-      if (!item || item.deleted || item.dead || item.type !== 'story' || !item.title) {
-        continue
-      }
-
-      const isShowHn = /^show hn:/i.test(item.title)
-      const entityName = isShowHn ? item.title.replace(/^show hn:\s*/i, '').trim() : item.title
-
-      // Resolve or create entity; only bother if there's a URL or it's a Show HN
-      let entityId: string | null = null
-      if (item.url || isShowHn) {
-        try {
-          entityId = await resolveEntity({
-            name: entityName,
-            url: item.url,
-            externalIds: { hackernews: String(item.id) },
-          })
-        } catch (resolveErr) {
-          errors.push(`resolve failed for HN ${id}: ${String(resolveErr)}`)
-          // Continue — we'll still write the observation with null entity_id
-        }
-      }
-
-      // Write observation (ON CONFLICT DO NOTHING — safe for concurrent runs)
-      await db
-        .insert(rawObservation)
-        .values({
-          entityId,
-          sourceId: 'hackernews',
-          sourceEventId: String(item.id),
-          eventType: isShowHn ? 'launch' : 'mention',
-          payload: {
-            hn_id: item.id,
-            title: item.title,
-            url: item.url ?? null,
-            score: item.score ?? 0,
-            author: item.by ?? null,
-            comments_count: item.descendants ?? 0,
-            is_show_hn: isShowHn,
-          },
-          observedAt: new Date(item.time * 1000),
-        })
-        .onConflictDoNothing()
-
-      itemsIngested++
-    } catch (err) {
-      errors.push(`failed to process HN item ${id}: ${String(err)}`)
+  // 3. Process in concurrent batches, stopping if we approach the time budget
+  for (let i = 0; i < unprocessed.length; i += CONCURRENT_ITEM_FETCHES) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) {
+      errors.push(`time budget reached after ${itemsIngested} items; remaining will be caught on next run`)
+      break
     }
+
+    const batch = unprocessed.slice(i, i + CONCURRENT_ITEM_FETCHES)
+    const results = await Promise.all(batch.map((id) => processItem(id, errors)))
+    itemsIngested += results.filter(Boolean).length
   }
 
   return {
