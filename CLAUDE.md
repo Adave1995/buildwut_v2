@@ -14,7 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Phase 0 (foundation)** — complete and deployed
 - **Phase 1 (HN ingest + sources health page)** — complete and live at https://buildwut-v2-6ywc.vercel.app
-- **Phase 2 (scoring engine + feed)** — next
+- **Phase 2 (scoring engine + feed)** — built on branch `phase-2-scoring-feed`, pending deploy
+- **Phase 3 (remaining sources)** — next
 
 ---
 
