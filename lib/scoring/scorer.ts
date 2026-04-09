@@ -23,7 +23,7 @@ import {
 } from './prompts/score-v1'
 
 const MODEL = 'claude-sonnet-4-6'
-const MAX_TOKENS = 1200
+const MAX_TOKENS = 900
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -31,7 +31,13 @@ export type ScorerResult =
   | { ok: true; scoreId: string }
   | { ok: false; reason: string }
 
-export async function scoreEntity(entityId: string): Promise<ScorerResult> {
+// Stop if we're within this many ms of the Vercel 10s hard limit
+const CLAUDE_DEADLINE_BUFFER_MS = 3_500
+
+export async function scoreEntity(
+  entityId: string,
+  functionStartedAt: number = Date.now()
+): Promise<ScorerResult> {
   // 1. Load entity
   const [entityRow] = await db
     .select()
@@ -98,7 +104,13 @@ export async function scoreEntity(entityId: string): Promise<ScorerResult> {
     grokSnippets
   )
 
-  // 6. Call Claude with structured output via tool_use
+  // 6. Guard: bail if we're too close to the 10s Vercel limit
+  const elapsed = Date.now() - functionStartedAt
+  if (elapsed > 10_000 - CLAUDE_DEADLINE_BUFFER_MS) {
+    return { ok: false, reason: `Time budget exceeded before Claude call (${elapsed}ms elapsed)` }
+  }
+
+  // 7. Call Claude with structured output via tool_use
   let scoreOutput: ScoreOutput
   try {
     const response = await anthropic.messages.create({
@@ -123,7 +135,7 @@ export async function scoreEntity(entityId: string): Promise<ScorerResult> {
   // Clamp all scores to 0–100
   const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)))
 
-  // 7. Write score_snapshot (immutable)
+  // 8. Write score_snapshot (immutable)
   const asOf = new Date()
   const [inserted] = await db
     .insert(scoreSnapshot)

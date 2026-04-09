@@ -8,8 +8,8 @@
 
 const XAI_BASE = 'https://api.x.ai/v1'
 const GROK_MODEL = 'grok-2-1212'
-// 3s total for both parallel Grok calls, leaving headroom for Claude
-const GROK_TIMEOUT_MS = 3_000
+// 2s total for both parallel Grok calls (they run in parallel), leaving headroom for Claude
+const GROK_TIMEOUT_MS = 2_000
 
 export type GrokSnippet = {
   source: 'x_posts' | 'web_search'

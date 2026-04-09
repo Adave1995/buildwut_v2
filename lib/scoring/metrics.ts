@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
-import { rawObservation, metricTimeseries } from '@/lib/db/schema'
-import { gte, isNotNull, and } from 'drizzle-orm'
+import { metricTimeseries } from '@/lib/db/schema'
+import { sql } from 'drizzle-orm'
 
 export type MetricsResult = {
   entityCount: number
@@ -8,58 +8,49 @@ export type MetricsResult = {
 }
 
 /**
- * For every entity that has at least one raw_observation in the last 24 hours,
- * compute `mentions_24h` (observation count) and `hn_score` (max HN score seen)
- * and append a row to metric_timeseries.
+ * For every entity with raw_observations in the last 24 hours, compute:
+ *   - mentions_24h: total observation count
+ *   - hn_score: max HN score seen
+ *
+ * Aggregation happens in Postgres (GROUP BY) so we only return one row per
+ * entity — avoids pulling thousands of rows into JS.
  */
 export async function computeMetrics(): Promise<MetricsResult> {
   const now = new Date()
-  const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
-  const recentObs = await db
-    .select({
-      entityId: rawObservation.entityId,
-      sourceId: rawObservation.sourceId,
-      payload: rawObservation.payload,
-    })
-    .from(rawObservation)
-    .where(
-      and(
-        isNotNull(rawObservation.entityId),
-        gte(rawObservation.observedAt, since24h)
-      )
-    )
+  type AggRow = { entity_id: string; mentions: string; hn_score: string }
 
-  // Aggregate per entity
-  const entityMap = new Map<string, { mentions: number; hnScore: number }>()
+  const rows = await db.execute<AggRow>(sql`
+    SELECT
+      entity_id,
+      COUNT(*) AS mentions,
+      COALESCE(
+        MAX(
+          CASE WHEN source_id = 'hackernews'
+            THEN (payload->>'score')::numeric
+            ELSE 0
+          END
+        ), 0
+      ) AS hn_score
+    FROM raw_observation
+    WHERE entity_id IS NOT NULL
+      AND observed_at >= NOW() - INTERVAL '24 hours'
+    GROUP BY entity_id
+  `)
 
-  for (const obs of recentObs) {
-    if (!obs.entityId) continue
-    const cur = entityMap.get(obs.entityId) ?? { mentions: 0, hnScore: 0 }
-    cur.mentions += 1
-    if (obs.sourceId === 'hackernews') {
-      const rawScore = (obs.payload as Record<string, unknown>).score
-      if (typeof rawScore === 'number') {
-        cur.hnScore = Math.max(cur.hnScore, rawScore)
-      }
-    }
-    entityMap.set(obs.entityId, cur)
-  }
-
-  if (entityMap.size === 0) {
+  if (rows.length === 0) {
     return { entityCount: 0, metricsWritten: 0 }
   }
 
-  const rows: Array<typeof metricTimeseries.$inferInsert> = []
-
-  for (const [entityId, { mentions, hnScore }] of entityMap) {
-    rows.push(
-      { entityId, metricName: 'mentions_24h', t: now, value: String(mentions) },
-      { entityId, metricName: 'hn_score', t: now, value: String(hnScore) }
+  const inserts: Array<typeof metricTimeseries.$inferInsert> = []
+  for (const row of rows) {
+    inserts.push(
+      { entityId: row.entity_id, metricName: 'mentions_24h', t: now, value: row.mentions },
+      { entityId: row.entity_id, metricName: 'hn_score',     t: now, value: row.hn_score }
     )
   }
 
-  await db.insert(metricTimeseries).values(rows)
+  await db.insert(metricTimeseries).values(inserts)
 
-  return { entityCount: entityMap.size, metricsWritten: rows.length }
+  return { entityCount: rows.length, metricsWritten: inserts.length }
 }

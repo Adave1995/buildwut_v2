@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 export const maxDuration = 10 // seconds (Vercel Hobby max)
 
 import { db } from '@/lib/db'
-import { entity, metricTimeseries, scoreSnapshot, sourceRun } from '@/lib/db/schema'
-import { sql, gte, eq, and, count } from 'drizzle-orm'
+import { scoreSnapshot, sourceRun } from '@/lib/db/schema'
+import { sql, gte, count } from 'drizzle-orm'
 import { scoreEntity } from '@/lib/scoring/scorer'
 
 const DAILY_SCORE_BUDGET = 50
-const SCORE_CACHE_DAYS = 7
 
 async function getDailyScoreCount(): Promise<number> {
   const todayStart = new Date()
@@ -23,54 +22,40 @@ async function getDailyScoreCount(): Promise<number> {
 }
 
 /**
- * Find one entity eligible for scoring:
- * - Has mentions_24h >= 10 in the last 24h (OR has no score at all)
- * - Has NOT been scored in the last SCORE_CACHE_DAYS days
+ * Find one entity eligible for scoring using a single efficient JOIN query:
+ * - Has mentions_24h >= 10 in the last 24h (from metric_timeseries)
+ *   OR has never been scored at all
+ * - Has NOT been scored in the last 7 days
  */
 async function findEntityToScore(): Promise<string | null> {
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const scoreCutoff = new Date(Date.now() - SCORE_CACHE_DAYS * 24 * 60 * 60 * 1000)
+  type Row = { entity_id: string }
 
-  // Entities scored recently — exclude these
-  const recentlyScored = db
-    .select({ entityId: scoreSnapshot.entityId })
-    .from(scoreSnapshot)
-    .where(gte(scoreSnapshot.asOf, scoreCutoff))
+  // Priority 1: entities with high recent mentions, not recently scored
+  const [highMention] = await db.execute<Row>(sql`
+    SELECT DISTINCT mt.entity_id
+    FROM metric_timeseries mt
+    LEFT JOIN score_snapshot ss
+      ON mt.entity_id = ss.entity_id
+      AND ss.as_of >= NOW() - INTERVAL '7 days'
+    WHERE mt.metric_name = 'mentions_24h'
+      AND mt.value::numeric >= 10
+      AND mt.t >= NOW() - INTERVAL '24 hours'
+      AND ss.entity_id IS NULL
+    LIMIT 1
+  `)
 
-  // Entities with high mentions in the last 24h
-  const highMentions = db
-    .select({ entityId: metricTimeseries.entityId })
-    .from(metricTimeseries)
-    .where(
-      and(
-        eq(metricTimeseries.metricName, 'mentions_24h'),
-        gte(metricTimeseries.t, since24h),
-        sql`${metricTimeseries.value}::numeric >= 10`
-      )
-    )
+  if (highMention) return highMention.entity_id
 
-  // Entities that have never been scored at all
-  const neverScored = db
-    .select({ entityId: scoreSnapshot.entityId })
-    .from(scoreSnapshot)
+  // Priority 2: any entity that has never been scored
+  const [unscored] = await db.execute<Row>(sql`
+    SELECT e.id AS entity_id
+    FROM entity e
+    LEFT JOIN score_snapshot ss ON e.id = ss.entity_id
+    WHERE ss.entity_id IS NULL
+    LIMIT 1
+  `)
 
-  // Pick first eligible: high-mention entities not recently scored
-  // Fall back to any entity never scored
-  const [candidate] = await db
-    .select({ id: entity.id })
-    .from(entity)
-    .where(
-      and(
-        sql`${entity.id} NOT IN (${recentlyScored})`,
-        sql`(
-          ${entity.id} IN (${highMentions})
-          OR ${entity.id} NOT IN (${neverScored})
-        )`
-      )
-    )
-    .limit(1)
-
-  return candidate?.id ?? null
+  return unscored?.entity_id ?? null
 }
 
 export async function GET(req: NextRequest) {
@@ -82,8 +67,9 @@ export async function GET(req: NextRequest) {
   }
 
   const startedAt = new Date()
+  const startMs = Date.now()
 
-  // Check daily budget before doing anything expensive
+  // Check daily budget before anything expensive
   const dailyCount = await getDailyScoreCount()
   if (dailyCount >= DAILY_SCORE_BUDGET) {
     await db.insert(sourceRun).values({
@@ -111,10 +97,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, scored: 0, reason: 'no_eligible_entities' })
   }
 
-  const result = await scoreEntity(entityId)
+  // Pass startMs so scoreEntity can bail before hitting the 10s wall
+  const result = await scoreEntity(entityId, startMs)
 
   const status = result.ok ? 'ok' : 'error'
-  const durationMs = Date.now() - startedAt.getTime()
+  const durationMs = Date.now() - startMs
 
   await db.insert(sourceRun).values({
     sourceId: 'score-pending',
