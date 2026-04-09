@@ -144,18 +144,34 @@ export const watchlistEntity = pgTable(
   (table) => [primaryKey({ columns: [table.watchlistId, table.entityId] })]
 )
 
-export const pipelineItem = pgTable('pipeline_item', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull(),
-  entityId: uuid('entity_id')
-    .notNull()
-    .references(() => entity.id, { onDelete: 'cascade' }),
-  stage: text('stage').notNull().default('inbox'), // 'inbox' | 'shortlist' | 'investigating' | 'building' | 'archived'
-  notes: text('notes'),
-  priority: integer('priority').notNull().default(0),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+export const pipelineItem = pgTable(
+  'pipeline_item',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    entityId: uuid('entity_id')
+      .notNull()
+      .references(() => entity.id, { onDelete: 'cascade' }),
+    stage: text('stage').notNull().default('inbox'), // 'inbox' | 'shortlist' | 'investigating' | 'building' | 'archived'
+    notes: text('notes'),
+    priority: integer('priority').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex('pipeline_item_user_entity_unique').on(table.userId, table.entityId)]
+)
+
+export const hiddenEntity = pgTable(
+  'hidden_entity',
+  {
+    userId: uuid('user_id').notNull(),
+    entityId: uuid('entity_id')
+      .notNull()
+      .references(() => entity.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.entityId] })]
+)
 
 export const alertRule = pgTable('alert_rule', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -207,6 +223,7 @@ export const entityRelations = relations(entity, ({ many }) => ({
   pipelineItems: many(pipelineItem),
   watchlistEntities: many(watchlistEntity),
   alertEvents: many(alertEvent),
+  hiddenEntities: many(hiddenEntity),
 }))
 
 export const rawObservationRelations = relations(rawObservation, ({ one }) => ({
@@ -232,6 +249,10 @@ export const watchlistEntityRelations = relations(watchlistEntity, ({ one }) => 
 
 export const pipelineItemRelations = relations(pipelineItem, ({ one }) => ({
   entity: one(entity, { fields: [pipelineItem.entityId], references: [entity.id] }),
+}))
+
+export const hiddenEntityRelations = relations(hiddenEntity, ({ one }) => ({
+  entity: one(entity, { fields: [hiddenEntity.entityId], references: [entity.id] }),
 }))
 
 export const alertRuleRelations = relations(alertRule, ({ many }) => ({

@@ -1,14 +1,19 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { db } from '@/lib/db'
-import { entity, scoreSnapshot } from '@/lib/db/schema'
-import { eq, desc } from 'drizzle-orm'
+import { entity, scoreSnapshot, pipelineItem, watchlist } from '@/lib/db/schema'
+import { eq, desc, and } from 'drizzle-orm'
+import { createClient } from '@/lib/supabase/server'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { NotesEditor } from '@/components/notes-editor'
+import { AddToWatchlistDialog } from '@/components/add-to-watchlist-dialog'
+import { addToPipeline } from '@/lib/actions/pipeline'
 import type { AdjacentNiche, Evidence } from '@/lib/db/schema'
 
-async function getOpportunity(entityId: string) {
+async function getOpportunity(entityId: string, userId: string | undefined) {
   const [entityRow] = await db
     .select()
     .from(entity)
@@ -17,7 +22,6 @@ async function getOpportunity(entityId: string) {
 
   if (!entityRow) return null
 
-  // Latest score snapshot
   const [score] = await db
     .select()
     .from(scoreSnapshot)
@@ -25,7 +29,26 @@ async function getOpportunity(entityId: string) {
     .orderBy(desc(scoreSnapshot.asOf))
     .limit(1)
 
-  return { entity: entityRow, score: score ?? null }
+  let pipelineRow: { id: string; notes: string | null } | null = null
+  let userWatchlists: { id: string; name: string }[] = []
+
+  if (userId) {
+    const [pi] = await db
+      .select({ id: pipelineItem.id, notes: pipelineItem.notes })
+      .from(pipelineItem)
+      .where(and(eq(pipelineItem.entityId, entityId), eq(pipelineItem.userId, userId)))
+      .limit(1)
+
+    pipelineRow = pi ?? null
+
+    userWatchlists = await db
+      .select({ id: watchlist.id, name: watchlist.name })
+      .from(watchlist)
+      .where(eq(watchlist.userId, userId))
+      .orderBy(watchlist.createdAt)
+  }
+
+  return { entity: entityRow, score: score ?? null, pipelineRow, userWatchlists }
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
@@ -46,11 +69,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 type DifficultyBadgeProps = { difficulty: AdjacentNiche['estimated_difficulty'] }
 function DifficultyBadge({ difficulty }: DifficultyBadgeProps) {
   const variant =
-    difficulty === 'low'
-      ? 'default'
-      : difficulty === 'medium'
-        ? 'secondary'
-        : ('outline' as const)
+    difficulty === 'low' ? 'default' : difficulty === 'medium' ? 'secondary' : ('outline' as const)
   return <Badge variant={variant}>{difficulty}</Badge>
 }
 
@@ -69,14 +88,19 @@ export default async function OpportunityPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const data = await getOpportunity(id)
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
+  const data = await getOpportunity(id, user?.id)
   if (!data) notFound()
 
-  const { entity: e, score } = data
+  const { entity: e, score, pipelineRow, userWatchlists } = data
   const niches = (score?.adjacentNiches ?? []) as AdjacentNiche[]
   const evidence = (score?.evidence ?? []) as Evidence[]
   const redFlags = score?.redFlags ?? []
+  const isInPipeline = pipelineRow !== null
 
   return (
     <div className="max-w-3xl">
@@ -107,19 +131,46 @@ export default async function OpportunityPage({
           </div>
           {score && (
             <div className="text-right shrink-0">
-              <div className="text-4xl font-bold tabular-nums leading-none">
-                {score.totalScore}
-              </div>
+              <div className="text-4xl font-bold tabular-nums leading-none">{score.totalScore}</div>
               <div className="text-xs text-muted-foreground mt-0.5">total score</div>
             </div>
           )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2 mt-4">
+          {!isInPipeline ? (
+            <form
+              action={async () => {
+                'use server'
+                await addToPipeline(e.id)
+              }}
+            >
+              <Button size="sm" variant="secondary" type="submit">
+                + Add to Pipeline
+              </Button>
+            </form>
+          ) : (
+            <Badge variant="outline" className="py-1.5 px-3">
+              In pipeline
+            </Badge>
+          )}
+          <AddToWatchlistDialog
+            entityId={e.id}
+            watchlists={userWatchlists}
+            trigger={
+              <Button size="sm" variant="outline">
+                Save to watchlist
+              </Button>
+            }
+          />
         </div>
       </div>
 
       {!score ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground text-sm">
-          This entity hasn&apos;t been scored yet. Scoring runs automatically once it
-          accumulates enough signals.
+          This entity hasn&apos;t been scored yet. Scoring runs automatically once it accumulates
+          enough signals.
         </div>
       ) : (
         <Tabs defaultValue="overview">
@@ -133,11 +184,11 @@ export default async function OpportunityPage({
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
           </TabsList>
 
           {/* ── Overview tab ── */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Sub-scores */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Scores</CardTitle>
@@ -152,7 +203,6 @@ export default async function OpportunityPage({
               </CardContent>
             </Card>
 
-            {/* Reasoning */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Why this score</CardTitle>
@@ -162,7 +212,6 @@ export default async function OpportunityPage({
               </CardContent>
             </Card>
 
-            {/* Red flags */}
             {redFlags.length > 0 && (
               <Card className="border-destructive/30">
                 <CardHeader className="pb-3">
@@ -181,7 +230,6 @@ export default async function OpportunityPage({
               </Card>
             )}
 
-            {/* Evidence */}
             {evidence.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
@@ -258,6 +306,24 @@ export default async function OpportunityPage({
                   </CardContent>
                 </Card>
               ))
+            )}
+          </TabsContent>
+
+          {/* ── Notes tab ── */}
+          <TabsContent value="notes">
+            {pipelineRow ? (
+              <NotesEditor
+                pipelineItemId={pipelineRow.id}
+                initialNotes={pipelineRow.notes}
+              />
+            ) : (
+              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                <p>Notes are saved per pipeline entry.</p>
+                <p className="mt-1">
+                  Use &ldquo;Add to Pipeline&rdquo; above to start tracking this opportunity and
+                  adding notes.
+                </p>
+              </div>
             )}
           </TabsContent>
         </Tabs>

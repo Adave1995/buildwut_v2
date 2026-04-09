@@ -1,13 +1,21 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
-import { scoreSnapshot, entity } from '@/lib/db/schema'
-import { desc, eq, max, and } from 'drizzle-orm'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import type { AdjacentNiche } from '@/lib/db/schema'
+import { scoreSnapshot, entity, pipelineItem, hiddenEntity } from '@/lib/db/schema'
+import { desc, eq, max, and, notInArray } from 'drizzle-orm'
+import { createClient } from '@/lib/supabase/server'
+import { FeedCard } from '@/components/feed-card'
+import type { FeedCardRow } from '@/components/feed-card'
 
-// Latest score snapshot per entity
-async function getFeed() {
+async function getFeed(userId: string | undefined): Promise<FeedCardRow[]> {
+  let hiddenIds: string[] = []
+  if (userId) {
+    const hidden = await db
+      .select({ entityId: hiddenEntity.entityId })
+      .from(hiddenEntity)
+      .where(eq(hiddenEntity.userId, userId))
+    hiddenIds = hidden.map((h) => h.entityId)
+  }
+
   // Subquery: latest as_of per entity
   const latestPerEntity = db
     .select({
@@ -20,7 +28,6 @@ async function getFeed() {
 
   return db
     .select({
-      // score
       scoreId: scoreSnapshot.id,
       totalScore: scoreSnapshot.totalScore,
       momentumScore: scoreSnapshot.momentumScore,
@@ -29,10 +36,8 @@ async function getFeed() {
       oneSentencePitch: scoreSnapshot.oneSentencePitch,
       adjacentNiches: scoreSnapshot.adjacentNiches,
       asOf: scoreSnapshot.asOf,
-      // entity
       entityId: entity.id,
       entityName: entity.name,
-      entitySlug: entity.slug,
       entityUrl: entity.url,
       entityCategory: entity.category,
     })
@@ -45,97 +50,29 @@ async function getFeed() {
       )
     )
     .innerJoin(entity, eq(scoreSnapshot.entityId, entity.id))
+    .where(hiddenIds.length > 0 ? notInArray(entity.id, hiddenIds) : undefined)
     .orderBy(desc(scoreSnapshot.totalScore))
     .limit(50)
 }
 
-function ScoreCircle({ score }: { score: number }) {
-  const color =
-    score >= 75 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-muted-foreground'
-  return (
-    <div className={`text-3xl font-bold tabular-nums leading-none ${color}`}>
-      {score}
-      <span className="text-sm font-normal text-muted-foreground">/100</span>
-    </div>
-  )
-}
-
-function SubScorePill({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-      <span>{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
-    </span>
-  )
-}
-
-type FeedRow = Awaited<ReturnType<typeof getFeed>>[number]
-
-function FeedCard({ row }: { row: FeedRow }) {
-  const topNiche = (row.adjacentNiches as AdjacentNiche[] | null)?.[0]
-
-  return (
-    <Link href={`/opportunities/${row.entityId}`} className="block focus:outline-none">
-      <Card className="hover:border-foreground/30 transition-colors">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-semibold text-base leading-tight truncate">
-                  {row.entityName}
-                </h2>
-                {row.entityCategory && (
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {row.entityCategory}
-                  </Badge>
-                )}
-              </div>
-              {row.oneSentencePitch && (
-                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                  {row.oneSentencePitch}
-                </p>
-              )}
-            </div>
-            <ScoreCircle score={row.totalScore} />
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-center gap-4 mb-3">
-            <SubScorePill label="momentum" value={row.momentumScore} />
-            <SubScorePill label="dist. gap" value={row.distributionGapScore} />
-            <SubScorePill label="feasibility" value={row.executionFeasibilityScore} />
-          </div>
-
-          {topNiche && (
-            <div className="rounded-md bg-muted/60 px-3 py-2 text-xs">
-              <span className="font-medium text-foreground">Adjacent niche: </span>
-              <span className="text-muted-foreground">
-                {topNiche.niche} — {topNiche.suggested_angle}
-              </span>
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            {row.entityUrl && (
-              <span
-                className="truncate max-w-[200px]"
-                title={row.entityUrl}
-              >
-                {row.entityUrl.replace(/^https?:\/\//, '')}
-              </span>
-            )}
-            <span className="ml-auto shrink-0">
-              {new Date(row.asOf).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
-  )
+async function getPipelineEntityIds(userId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ entityId: pipelineItem.entityId })
+    .from(pipelineItem)
+    .where(eq(pipelineItem.userId, userId))
+  return new Set(rows.map((r) => r.entityId))
 }
 
 export default async function FeedPage() {
-  const feed = await getFeed()
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const [feed, pipelineIds] = await Promise.all([
+    getFeed(user?.id),
+    user ? getPipelineEntityIds(user.id) : Promise.resolve(new Set<string>()),
+  ])
 
   return (
     <div>
@@ -161,7 +98,11 @@ export default async function FeedPage() {
       ) : (
         <div className="grid gap-3">
           {feed.map((row) => (
-            <FeedCard key={row.scoreId} row={row} />
+            <FeedCard
+              key={row.scoreId}
+              row={row}
+              isInPipeline={pipelineIds.has(row.entityId)}
+            />
           ))}
         </div>
       )}
