@@ -33,7 +33,8 @@ export async function updateSession(request: NextRequest) {
   // Allow public routes through
   const isPublicRoute =
     pathname.startsWith('/login') ||
-    pathname.startsWith('/api/auth')
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/cron')
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
