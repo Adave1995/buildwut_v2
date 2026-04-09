@@ -13,9 +13,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Current status (updated 2026-04-08)
 
 - **Phase 0 (foundation)** — complete and deployed
-- **Phase 1 (HN ingest + sources health page)** — complete and live at https://buildwut-v2-6ywc.vercel.app
-- **Phase 2 (scoring engine + feed)** — built on branch `phase-2-scoring-feed`, pending deploy
-- **Phase 3 (remaining sources)** — next
+- **Phase 1 (HN ingest + sources health page)** — complete and live
+- **Phase 2 (scoring engine + feed)** — complete and deployed on main; Vercel cron jobs active
+- **Phase 3 (remaining sources)** — next ← START HERE
+
+### Phase 3 checklist
+Build these in order. Each needs: a connector file + a cron route + registry update + vercel.json entry.
+
+| # | Source | File | Key | Start enabled? | Schedule |
+|---|---|---|---|---|---|
+| 1 | Reddit | `lib/ingest/reddit.ts` | None | Yes | `0 * * * *` |
+| 2 | Indie Hackers | `lib/ingest/indiehackers.ts` | None | Yes | `0 */6 * * *` |
+| 3 | Apple RSS | `lib/ingest/apple-rss.ts` | None | Yes | `0 9 * * *` |
+| 4 | GitHub Trending | `lib/ingest/github.ts` | PAT (in env) | Yes | `0 8 * * *` |
+| 5 | Product Hunt | `lib/ingest/producthunt.ts` | OAuth2 (in env) | Yes | `0 */6 * * *` |
+| 6 | X / Twitter | `lib/ingest/x-twitter.ts` | Bearer (in env) | **No** | `0 */2 * * *` |
+| 7 | Google Trends | `lib/ingest/google-trends.ts` | None | **No** | `0 10 * * *` |
+
+**Pattern to follow:** `lib/ingest/hn.ts` (connector) + `app/api/cron/hackernews/route.ts` (cron route).
+After each connector: add to `lib/sources/registry.ts` and `vercel.json` crons array.
+
+### Phase 2 deployment notes (for reference)
+- Vercel Pro plan — all crons run natively via vercel.json (no cron-job.com)
+- `maxDuration`: ingest routes = 30s, score-pending = 60s
+- Grok enrichment enabled by default in scorer.ts (`withGrok = true`)
+- New Anthropic API key added 2026-04-08
 
 ---
 
