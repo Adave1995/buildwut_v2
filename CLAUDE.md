@@ -16,27 +16,26 @@ Austin is non-technical. He does not write or review code directly. Claude is re
 
 ---
 
-## Current status (updated 2026-04-08)
+## Current status (updated 2026-04-09)
 
 - **Phase 0 (foundation)** — complete
 - **Phase 1 (HN ingest + sources health)** — complete
-- **Phase 2 (scoring engine + feed)** — complete and deployed
-- **Phase 3 (remaining sources)** — next ← START HERE
+- **Phase 2 (scoring engine + feed)** — complete
+- **Phase 3 (remaining sources)** — complete
+- **Phase 4 (workflow features)** — complete
+- **Phase 5 (alerts + polish)** — in progress ← START HERE
 
-### Phase 3 checklist
-Build in order. Each needs: connector file + cron route + registry update + `vercel.json` entry.
+### Phase 5 checklist
+- [x] Signals tab on opportunity detail (Recharts, `metric_timeseries`)
+- [x] Alert rules engine — `app/api/cron/run-alerts/route.ts`, every 30 min
+- [x] Alert management page — `/alerts` with create/toggle/delete
+- [x] In-app notification badge on Alerts nav item
+- [x] Daily email digest — `app/api/cron/digest/route.ts`, 8am daily via Resend
+- [ ] Deploy and verify end-to-end in production
 
-| # | Source | File | Key | Start enabled? | Schedule |
-|---|---|---|---|---|---|
-| 1 | Reddit | `lib/ingest/reddit.ts` | None | Yes | `0 * * * *` |
-| 2 | Indie Hackers | `lib/ingest/indiehackers.ts` | None | Yes | `0 */6 * * *` |
-| 3 | Apple RSS | `lib/ingest/apple-rss.ts` | None | Yes | `0 9 * * *` |
-| 4 | GitHub Trending | `lib/ingest/github.ts` | PAT (in env) | Yes | `0 8 * * *` |
-| 5 | Product Hunt | `lib/ingest/producthunt.ts` | OAuth2 (in env) | Yes | `0 */6 * * *` |
-| 6 | X / Twitter | `lib/ingest/x-twitter.ts` | Bearer (in env) | **No** | `0 */2 * * *` |
-| 7 | Google Trends | `lib/ingest/google-trends.ts` | None | **No** | `0 10 * * *` |
-
-Pattern to follow: `lib/ingest/hn.ts` (connector) + `app/api/cron/hackernews/route.ts` (cron route).
+### Phase 6 (next)
+- Onboarding tour (deferred from Phase 5)
+- See `BUILD_PLAN.md` section 14 for full Phase 6 scope
 
 ---
 
@@ -90,3 +89,6 @@ See `.env.example` and `BUILD_PLAN.md` section 12 for the full list. Quirks wort
 - **Product Hunt:** `PRODUCT_HUNT_API_KEY` = client ID, `PRODUCT_HUNT_API_SECRET` = client secret. The connector must exchange these for a bearer token at runtime via OAuth2 `client_credentials`.
 - **Reddit + Google Trends:** no API keys needed.
 - **`DATABASE_URL`:** use Transaction Pooler (port 6543), not the direct connection (port 5432).
+- **`DIGEST_EMAIL`:** email address for the daily digest. Falls back to first entry in `ALLOWED_SIGNUP_EMAILS` if not set.
+- **`NEXT_PUBLIC_APP_URL`:** public app URL used in digest email links (e.g. `https://buildwut.vercel.app`).
+- **`RESEND_API_KEY`:** now active (Phase 5). `from` address is `digest@buildwut.app` — add that domain in Resend dashboard.
