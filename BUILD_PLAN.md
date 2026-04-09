@@ -570,6 +570,13 @@ SENTRY_DSN=
 | X extra keys | `X_SECRET_KEY` + `X_CONSUMER_KEY` exist in env | OAuth 1.0a keys from X app registration; not needed for Bearer Token search in V1 |
 | Vercel function timeout | Ingest routes: `maxDuration = 30`; scoring route: `maxDuration = 60` | Pro plan allows up to 300s; ingest still budgets time internally and stops gracefully |
 
+### Supabase setup checklist (for new environments)
+
+1. Run migration: `supabase/migrations/0000_steady_mongoose.sql` in Supabase SQL editor
+2. Enable pg_trgm: `CREATE EXTENSION IF NOT EXISTS pg_trgm;`
+3. Set Site URL in Authentication → URL Configuration
+4. Add redirect URL: `https://{your-domain}/api/auth/callback`
+
 ---
 
 ## 14. Phased roadmap
