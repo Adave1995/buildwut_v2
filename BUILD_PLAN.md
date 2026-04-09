@@ -563,12 +563,12 @@ SENTRY_DSN=
 
 | Topic | Decision | Reason |
 |---|---|---|
-| Cron scheduling | **cron-job.com** (not Vercel cron) | Vercel Hobby plan only allows 1 daily cron; cron-job.com is free and sends custom headers |
+| Cron scheduling | **Vercel cron** (native, `vercel.json`) | Upgraded to Pro — unlimited cron jobs, no external scheduler needed |
 | DATABASE_URL | **Transaction Pooler** port 6543 | Designed for serverless; direct connection (port 5432) exhausts Supabase connection limits |
 | Supabase redirect URLs | Must be whitelisted in Supabase → Auth → URL Configuration | Magic link breaks silently if production domain isn't in the allowlist |
 | Product Hunt API | Austin has client ID (`PRODUCT_HUNT_API_KEY`) + secret (`PRODUCT_HUNT_API_SECRET`) | PH connector must do OAuth2 client_credentials exchange to get bearer token at runtime |
 | X extra keys | `X_SECRET_KEY` + `X_CONSUMER_KEY` exist in env | OAuth 1.0a keys from X app registration; not needed for Bearer Token search in V1 |
-| Vercel function timeout | Export `maxDuration = 10` on all cron routes | Hobby plan hard limit is 10s; ingest functions must budget time and stop gracefully |
+| Vercel function timeout | Ingest routes: `maxDuration = 30`; scoring route: `maxDuration = 60` | Pro plan allows up to 300s; ingest still budgets time internally and stops gracefully |
 
 ---
 

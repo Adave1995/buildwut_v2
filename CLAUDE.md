@@ -94,9 +94,7 @@ Every cron route must:
 4. Write a `source_run` row **regardless of outcome** (this is what `/sources` reads)
 5. Return `{ok, itemsIngested, durationMs}`
 
-**Scheduling: cron-job.com, not Vercel cron.** Vercel Hobby plan only allows 1 daily cron job — all scheduling is handled by cron-job.com (free). Each cron route is a standard GET handler protected by `CRON_SECRET`. The cron-job.com job sends `Authorization: Bearer {CRON_SECRET}` as a custom header.
-
-New cron routes must also be added as jobs in cron-job.com manually.
+**Scheduling: Vercel cron (native).** Project is on Vercel Pro — all cron jobs are defined in `vercel.json` under the `"crons"` key. Vercel automatically injects `Authorization: Bearer {CRON_SECRET}` on each invocation, which the routes verify. New cron routes must be added to `vercel.json` and redeployed — no external service needed.
 
 X API and Google Trends sources start with `enabled: false` in the registry. Enable manually after confirming they work without errors.
 
@@ -109,7 +107,7 @@ X API and Google Trends sources start with `enabled: false` in the registry. Ena
 - **Grok is enrichment-only** — it never produces a score. Claude produces all scores.
 - **Score at most ~50 entities/day** in V1. Check daily budget before calling Claude.
 - **Rate limits are sacred** — never exceed any source's documented limit. Use token bucket or simple sleep between requests.
-- **Vercel Hobby function limit is 10 seconds.** Ingest functions must include a time budget and stop gracefully before hitting it. Export `maxDuration = 10` on every cron route.
+- **Vercel Pro function timeout.** Set `maxDuration` per route: ingest routes use 30s, scoring uses 60s. Ingest functions should still budget time internally and stop gracefully if work remains (let the next run continue).
 - **Secrets never logged.** Sentry scrubbing must be configured.
 - Always work on a feature branch, never commit directly to `main`.
 
@@ -119,7 +117,7 @@ X API and Google Trends sources start with `enabled: false` in the registry. Ena
 
 | Decision | Choice | Reason |
 |---|---|---|
-| Cron scheduling | **cron-job.com** | Vercel Hobby only allows 1 daily cron |
+| Cron scheduling | **Vercel cron** (native, `vercel.json`) | Project on Pro — no external scheduler needed |
 | DATABASE_URL | **Transaction Pooler** (port 6543) | Serverless-safe; direct connection exhausts Supabase limits |
 | Auth | Supabase magic link | Redirect URL must be whitelisted in Supabase → Authentication → URL Configuration |
 
