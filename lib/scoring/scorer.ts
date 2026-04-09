@@ -31,12 +31,10 @@ export type ScorerResult =
   | { ok: true; scoreId: string }
   | { ok: false; reason: string }
 
-// Stop if we're within this many ms of the Vercel 10s hard limit
-const CLAUDE_DEADLINE_BUFFER_MS = 3_500
-
 export async function scoreEntity(
   entityId: string,
-  functionStartedAt: number = Date.now()
+  functionStartedAt: number = Date.now(),
+  withGrok: boolean = true
 ): Promise<ScorerResult> {
   // 1. Load entity
   const [entityRow] = await db
@@ -80,12 +78,14 @@ export async function scoreEntity(
     .orderBy(desc(rawObservation.observedAt))
     .limit(5)
 
-  // 4. Grok enrichment (parallel, non-blocking — failure is fine)
+  // 4. Grok enrichment — non-fatal; failure just means no enrichment snippets.
   let grokSnippets: Awaited<ReturnType<typeof enrichWithGrok>> = []
-  try {
-    grokSnippets = await enrichWithGrok(entityRow.name)
-  } catch {
-    // non-fatal: scoring continues without Grok snippets
+  if (withGrok) {
+    try {
+      grokSnippets = await enrichWithGrok(entityRow.name)
+    } catch {
+      // non-fatal
+    }
   }
 
   // 5. Build prompt
@@ -104,23 +104,31 @@ export async function scoreEntity(
     grokSnippets
   )
 
-  // 6. Guard: bail if we're too close to the 10s Vercel limit
-  const elapsed = Date.now() - functionStartedAt
-  if (elapsed > 10_000 - CLAUDE_DEADLINE_BUFFER_MS) {
-    return { ok: false, reason: `Time budget exceeded before Claude call (${elapsed}ms elapsed)` }
+  // 6. Call Claude with structured output via tool_use.
+  //    Cap at 25s; score-pending maxDuration is 60s so we have plenty of headroom.
+  const remaining = 55_000 - (Date.now() - functionStartedAt)
+  const claudeTimeout = Math.min(remaining - 500, 25_000) // leave 500ms for DB write
+  if (claudeTimeout < 2_000) {
+    return { ok: false, reason: `Insufficient time for Claude call (${claudeTimeout}ms remaining)` }
   }
 
-  // 7. Call Claude with structured output via tool_use
   let scoreOutput: ScoreOutput
   try {
-    const response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
-      tools: [SCORE_TOOL],
-      tool_choice: { type: 'tool', name: 'score_entity' },
-      messages: [{ role: 'user', content: userPrompt }],
-    })
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), claudeTimeout)
+
+    const response = await anthropic.messages.create(
+      {
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        system: SYSTEM_PROMPT,
+        tools: [SCORE_TOOL],
+        tool_choice: { type: 'tool', name: 'score_entity' },
+        messages: [{ role: 'user', content: userPrompt }],
+      },
+      { signal: controller.signal }
+    )
+    clearTimeout(timer)
 
     const toolUseBlock = response.content.find((b) => b.type === 'tool_use')
     if (!toolUseBlock || toolUseBlock.type !== 'tool_use') {

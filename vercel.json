@@ -1,3 +1,7 @@
 {
-  "crons": []
+  "crons": [
+    { "path": "/api/cron/hackernews", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/compute-metrics", "schedule": "5 * * * *" },
+    { "path": "/api/cron/score-pending", "schedule": "20 * * * *" }
+  ]
 }

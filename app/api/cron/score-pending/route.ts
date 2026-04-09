@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-export const maxDuration = 10 // seconds (Vercel Hobby max)
+export const maxDuration = 60 // seconds
 
 import { db } from '@/lib/db'
 import { scoreSnapshot, sourceRun } from '@/lib/db/schema'
