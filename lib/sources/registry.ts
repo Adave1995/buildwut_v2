@@ -37,7 +37,7 @@ const sources: SourceDefinition[] = [
   {
     id: 'reddit',
     name: 'Reddit',
-    enabled: true,
+    enabled: false, // Disabled: Vercel IPs blocked by Reddit as of 2026. See CLAUDE.md for re-enable options.
     cadenceCron: '0 * * * *',
     rateLimit: { requests: 60, perSeconds: 60 },
     licensingState: 'free',

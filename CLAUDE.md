@@ -72,7 +72,10 @@ Add the route to `vercel.json` crons array and redeploy. `maxDuration`: ingest r
 - **`score_snapshot` is immutable.** Write once; create a new row to re-score.
 - **`prompts/score-v1.ts` is versioned.** Never edit in place — bump the version number.
 - **Entity resolver** — do not change matching logic without running resolver tests first.
-- **No Reddit OAuth** — use public JSON (`reddit.com/r/{sub}.json`) with `User-Agent: buildwut/0.1 (personal tool)`.
+- **Reddit is currently disabled** — Vercel's IPs are blocked by Reddit as of 2026. The source is set to `enabled: false` in the registry. Austin applied for official API access (~April 2026) but has not received a response. When re-enabling, pick one of these approaches:
+  1. **Cloudflare Worker proxy** (recommended) — ~10-line Worker that fetches `reddit.com/r/{sub}.json` from Cloudflare's IPs and forwards to Vercel. Free tier, zero infra to manage.
+  2. **Third-party RSS middleman** — use a service like FetchRSS to consume Reddit RSS feeds (`reddit.com/r/{sub}.rss`) so requests come from their servers, not Vercel's. Lowest-code option but adds a third-party dependency.
+  3. **Official API** — if the API access application is ever approved, update the ingester to use `oauth.reddit.com` with a bearer token and store `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` in env.
 - **Google Trends is non-blocking** — on failure, log `partial` in `source_run` and continue.
 - **Grok is enrichment-only** — it never produces a score. Claude produces all scores.
 - **Score ≤50 entities/day** in V1. Check daily budget before calling Claude.
@@ -87,7 +90,7 @@ Add the route to `vercel.json` crons array and redeploy. `maxDuration`: ingest r
 See `.env.example` and `BUILD_PLAN.md` section 12 for the full list. Quirks worth knowing:
 
 - **Product Hunt:** `PRODUCT_HUNT_API_KEY` = client ID, `PRODUCT_HUNT_API_SECRET` = client secret. The connector must exchange these for a bearer token at runtime via OAuth2 `client_credentials`.
-- **Reddit + Google Trends:** no API keys needed.
+- **Reddit:** currently disabled (see Critical rules above). No env vars needed until re-enabled via one of the proxy options.
 - **`DATABASE_URL`:** use Transaction Pooler (port 6543), not the direct connection (port 5432).
 - **`DIGEST_EMAIL`:** email address for the daily digest. Falls back to first entry in `ALLOWED_SIGNUP_EMAILS` if not set.
 - **`NEXT_PUBLIC_APP_URL`:** public app URL used in digest email links (e.g. `https://buildwut.vercel.app`).
