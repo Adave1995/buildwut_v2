@@ -55,8 +55,11 @@ async function processItem(id: number, errors: string[]): Promise<boolean> {
     const isShowHn = /^show hn:/i.test(item.title)
     const entityName = isShowHn ? item.title.replace(/^show hn:\s*/i, '').trim() : item.title
 
+    // Only create/resolve entities for Show HN posts (actual product launches).
+    // Regular stories are stored as raw observations with null entityId — they
+    // won't become feed entries or get scored, but remain available as signal data.
     let entityId: string | null = null
-    if (item.url || isShowHn) {
+    if (isShowHn) {
       try {
         entityId = await resolveEntity({
           name: entityName,
