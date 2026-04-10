@@ -1,22 +1,28 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
-import { scoreSnapshot, entity, pipelineItem, hiddenEntity } from '@/lib/db/schema'
+import { scoreSnapshot, entity, pipelineItem, hiddenEntity, watchlist, watchlistEntity } from '@/lib/db/schema'
 import { desc, eq, max, and, notInArray } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 import { FeedCard } from '@/components/feed-card'
 import type { FeedCardRow } from '@/components/feed-card'
 import { HelpTip } from '@/components/help-tip'
 
-async function getFeed(userId: string | undefined): Promise<FeedCardRow[]> {
-  let hiddenIds: string[] = []
-  if (userId) {
-    const hidden = await db
-      .select({ entityId: hiddenEntity.entityId })
-      .from(hiddenEntity)
-      .where(eq(hiddenEntity.userId, userId))
-    hiddenIds = hidden.map((h) => h.entityId)
-  }
+async function getExcludedIds(userId: string): Promise<string[]> {
+  const [hidden, pipeline, watchlisted] = await Promise.all([
+    db.select({ entityId: hiddenEntity.entityId }).from(hiddenEntity).where(eq(hiddenEntity.userId, userId)),
+    db.select({ entityId: pipelineItem.entityId }).from(pipelineItem).where(eq(pipelineItem.userId, userId)),
+    db
+      .select({ entityId: watchlistEntity.entityId })
+      .from(watchlistEntity)
+      .innerJoin(watchlist, eq(watchlistEntity.watchlistId, watchlist.id))
+      .where(eq(watchlist.userId, userId)),
+  ])
+  const ids = new Set<string>()
+  for (const r of [...hidden, ...pipeline, ...watchlisted]) ids.add(r.entityId)
+  return [...ids]
+}
 
+async function getFeed(excludedIds: string[]): Promise<FeedCardRow[]> {
   // Subquery: latest as_of per entity
   const latestPerEntity = db
     .select({
@@ -51,17 +57,9 @@ async function getFeed(userId: string | undefined): Promise<FeedCardRow[]> {
       )
     )
     .innerJoin(entity, eq(scoreSnapshot.entityId, entity.id))
-    .where(hiddenIds.length > 0 ? notInArray(entity.id, hiddenIds) : undefined)
+    .where(excludedIds.length > 0 ? notInArray(entity.id, excludedIds) : undefined)
     .orderBy(desc(scoreSnapshot.totalScore))
     .limit(50)
-}
-
-async function getPipelineEntityIds(userId: string): Promise<Set<string>> {
-  const rows = await db
-    .select({ entityId: pipelineItem.entityId })
-    .from(pipelineItem)
-    .where(eq(pipelineItem.userId, userId))
-  return new Set(rows.map((r) => r.entityId))
 }
 
 export default async function FeedPage() {
@@ -70,10 +68,8 @@ export default async function FeedPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [feed, pipelineIds] = await Promise.all([
-    getFeed(user?.id),
-    user ? getPipelineEntityIds(user.id) : Promise.resolve(new Set<string>()),
-  ])
+  const excludedIds = user ? await getExcludedIds(user.id) : []
+  const feed = await getFeed(excludedIds)
 
   return (
     <div>
@@ -108,7 +104,7 @@ export default async function FeedPage() {
             <FeedCard
               key={row.scoreId}
               row={row}
-              isInPipeline={pipelineIds.has(row.entityId)}
+              isInPipeline={false}
             />
           ))}
         </div>

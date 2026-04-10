@@ -70,7 +70,7 @@ export function FeedCard({
     if (inPipeline) return
     startAdd(async () => {
       await addToPipeline(row.entityId)
-      setInPipeline(true)
+      setHidden(true)
     })
   }
 
