@@ -434,11 +434,11 @@ export function PipelineBoard({ items: initialItems }: { items: PipelineRow[] })
 
         {/* Detail panel — slides in from right */}
         <div
-          className={`shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out ${
+          className={`shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out self-start sticky top-6 ${
             selectedItem ? 'w-[400px]' : 'w-0'
           }`}
         >
-          <div className="w-[400px] pl-6 border-l">
+          <div className="w-[400px] pl-6 border-l overflow-y-auto max-h-[calc(100vh-4rem)]">
             {selectedItem && (
               <PipelineDetailPanel
                 key={selectedItem.entityId}
