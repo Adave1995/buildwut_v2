@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { LayoutDashboard, Kanban, Bookmark, Rss, Settings, Bell } from 'lucide-react'
 import { AlertBadge } from '@/components/alert-badge'
+import { HelpToggle } from '@/components/help-toggle'
 
 const navItems = [
   { href: '/feed', label: 'Feed', icon: LayoutDashboard },
@@ -35,6 +36,9 @@ export function NavSidebar() {
           </Link>
         ))}
       </nav>
+      <div className="px-2 pt-2 border-t border-border/60 mt-2">
+        <HelpToggle />
+      </div>
     </aside>
   )
 }

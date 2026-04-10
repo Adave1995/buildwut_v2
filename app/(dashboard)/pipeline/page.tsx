@@ -3,6 +3,7 @@ import { pipelineItem, entity } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 import { PipelineBoard } from '@/components/pipeline-board'
+import { HelpTip } from '@/components/help-tip'
 
 async function getPipelineItems(userId: string) {
   return db
@@ -32,7 +33,13 @@ export default async function PipelinePage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Pipeline</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold">Pipeline</h1>
+          <HelpTip
+            title="Your Pipeline"
+            content="A personal Kanban board for tracking opportunities you're actively evaluating. Add opportunities here from the Feed or any opportunity detail page using '+Pipeline'. Drag cards between stages as your thinking progresses. Click an opportunity to open its detail page and write notes under the Notes tab."
+          />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           Drag cards between stages to track your progress
         </p>

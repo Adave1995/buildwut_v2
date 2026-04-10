@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertsClient } from '@/components/alerts-client'
+import { HelpTip } from '@/components/help-tip'
 import { markAlertsRead } from '@/lib/actions/alerts'
 
 export default async function AlertsPage() {
@@ -49,7 +50,13 @@ export default async function AlertsPage() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Alerts</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold">Alerts</h1>
+            <HelpTip
+              title="Alerts"
+              content="Define rules and BuildWut checks them every 30 minutes. When a condition fires, you get an in-app notification (the dot on Alerts in the sidebar) and optionally an email. Four condition types: Score Above/Below a threshold, New Entity discovered, or Momentum Spike (a sudden jump in signals). Toggle rules on/off without deleting them."
+            />
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             Get notified when opportunities match your criteria
           </p>
@@ -67,12 +74,18 @@ export default async function AlertsPage() {
       {recentEvents.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              Recent alerts
-              {unreadCount > 0 && (
-                <Badge className="rounded-full px-1.5 text-xs">{unreadCount} new</Badge>
-              )}
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                Recent alerts
+                {unreadCount > 0 && (
+                  <Badge className="rounded-full px-1.5 text-xs">{unreadCount} new</Badge>
+                )}
+              </CardTitle>
+              <HelpTip
+                title="Recent Alert Events"
+                content="Alerts that have fired. Blue dot = unread. 'Mark all read' clears the sidebar badge. Each event shows which opportunity triggered which rule, and when. Click 'Mark all read' at the top right to dismiss them all at once."
+              />
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {recentEvents.map((ev) => {

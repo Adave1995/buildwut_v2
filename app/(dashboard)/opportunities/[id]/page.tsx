@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { NotesEditor } from '@/components/notes-editor'
 import { AddToWatchlistDialog } from '@/components/add-to-watchlist-dialog'
 import { SignalsChart } from '@/components/signals-chart'
+import { HelpTip } from '@/components/help-tip'
 import { addToPipeline } from '@/lib/actions/pipeline'
 import type { AdjacentNiche, Evidence } from '@/lib/db/schema'
 
@@ -227,7 +228,13 @@ export default async function OpportunityPage({
           <TabsContent value="overview" className="space-y-6">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Scores</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Scores</CardTitle>
+                  <HelpTip
+                    title="Score Breakdown"
+                    content="Claude's full 6-dimension breakdown. Distribution Gap is the most important: high means a product with strong engagement but weak reach — that's the opening for you. Momentum shows how fast signals are growing. Execution Feasibility tells you how realistically buildable this is for a solo founder."
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
                 <ScoreBar label="Momentum" value={score.momentumScore} />
@@ -241,7 +248,13 @@ export default async function OpportunityPage({
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Why this score</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">Why this score</CardTitle>
+                  <HelpTip
+                    title="Claude's Reasoning"
+                    content="The plain-English explanation of how and why Claude scored this opportunity the way it did. Read this to understand what's actually driving the number and whether it matches your own read of the opportunity."
+                  />
+                </div>
               </CardHeader>
               <CardContent>
                 <p className="text-sm leading-relaxed">{score.reasoning}</p>
@@ -269,7 +282,13 @@ export default async function OpportunityPage({
             {evidence.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Evidence</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">Evidence</CardTitle>
+                    <HelpTip
+                      title="Evidence Sources"
+                      content="The raw signals Claude analyzed — actual posts, comments, and data points from Hacker News, Reddit, Product Hunt, and other sources. Each entry shows where the signal came from and links to the original so you can verify it yourself."
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {evidence.map((ev, i) => (
@@ -309,6 +328,17 @@ export default async function OpportunityPage({
 
           {/* ── Adjacent Niches tab ── */}
           <TabsContent value="niches" className="space-y-4">
+            {niches.length > 0 && (
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Markets where a similar product could win but hasn&apos;t been built yet
+                </p>
+                <HelpTip
+                  title="Adjacent Niches"
+                  content="This is the core value of BuildWut. Each card is a specific market segment where Claude believes a similar product could win but hasn't been served yet. Difficulty = estimated build+marketing effort. 'Suggested angle' is a concrete starting point you could act on today."
+                />
+              </div>
+            )}
             {niches.length === 0 ? (
               <p className="text-sm text-muted-foreground">No adjacent niches in this score.</p>
             ) : (
@@ -360,10 +390,19 @@ export default async function OpportunityPage({
           {/* ── Notes tab ── */}
           <TabsContent value="notes">
             {pipelineRow ? (
-              <NotesEditor
-                pipelineItemId={pipelineRow.id}
-                initialNotes={pipelineRow.notes}
-              />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground">Your private scratchpad for this opportunity</p>
+                  <HelpTip
+                    title="Notes"
+                    content="Notes are saved to your Pipeline entry for this opportunity and are only visible to you. Use this tab to capture your thinking, research, and next steps as you evaluate whether to build something here."
+                  />
+                </div>
+                <NotesEditor
+                  pipelineItemId={pipelineRow.id}
+                  initialNotes={pipelineRow.notes}
+                />
+              </div>
             ) : (
               <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
                 <p>Notes are saved per pipeline entry.</p>

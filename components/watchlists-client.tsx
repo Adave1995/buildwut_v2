@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createWatchlist, deleteWatchlist } from '@/lib/actions/watchlist'
+import { HelpTip } from '@/components/help-tip'
 
 export type WatchlistRow = {
   id: string
@@ -41,7 +42,13 @@ export function WatchlistsClient({ initial }: { initial: WatchlistRow[] }) {
     <div>
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Watchlists</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold">Watchlists</h1>
+            <HelpTip
+              title="Watchlists"
+              content="Named collections for organizing opportunities. Create a list (e.g. 'Mobile ideas', 'Q2 bets'), then save opportunities to it via 'Save to watchlist' on any opportunity's detail page. Good for grouping ideas by theme without moving them into active Pipeline evaluation. Hover a watchlist card to delete it."
+            />
+          </div>
           <p className="text-sm text-muted-foreground mt-1">Saved collections of opportunities</p>
         </div>
         <div className="flex gap-2">

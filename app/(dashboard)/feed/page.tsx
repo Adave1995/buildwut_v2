@@ -5,6 +5,7 @@ import { desc, eq, max, and, notInArray } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 import { FeedCard } from '@/components/feed-card'
 import type { FeedCardRow } from '@/components/feed-card'
+import { HelpTip } from '@/components/help-tip'
 
 async function getFeed(userId: string | undefined): Promise<FeedCardRow[]> {
   let hiddenIds: string[] = []
@@ -77,7 +78,13 @@ export default async function FeedPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Opportunity Feed</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold">Opportunity Feed</h1>
+          <HelpTip
+            title="Opportunity Feed"
+            content="Every product and project BuildWut has discovered and AI-scored, ranked best to worst by total score. New items appear here automatically as sources ingest every 30 min–24h depending on the source. Click any card to open the full AI analysis. Hover a card to reveal '+Pipeline' (start tracking it) and 'Hide' (remove it from your feed permanently)."
+          />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           Ranked by total score · updated as sources ingest
         </p>

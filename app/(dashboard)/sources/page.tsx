@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { HelpTip } from '@/components/help-tip'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,7 +66,13 @@ export default async function SourcesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Sources</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Sources</h1>
+          <HelpTip
+            title="Sources Health"
+            content="Every data source BuildWut monitors and its latest run status. Green = healthy, Yellow = partial (some data, some errors), Red = failed. Check here if the feed feels stale. Sources run automatically: Hacker News (every 30min), Reddit (hourly), X/Twitter (every 2h), Product Hunt & Indie Hackers (every 6h), GitHub, Apple RSS & Google Trends (daily). You don't need to do anything."
+          />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           Health dashboard — check here when something breaks.
         </p>
