@@ -53,7 +53,7 @@ export function FeedCard({
 }) {
   const router = useRouter()
   const [hidden, setHidden] = useState(false)
-  const [inPipeline, setInPipeline] = useState(initialInPipeline)
+  const [inPipeline] = useState(initialInPipeline)
   const [addPending, startAdd] = useTransition()
   const [hidePending, startHide] = useTransition()
 
