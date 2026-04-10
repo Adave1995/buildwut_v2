@@ -3,10 +3,7 @@ import { rawObservation } from '@/lib/db/schema'
 import { resolveEntity } from './resolver'
 import type { IngestResult } from '@/lib/sources/registry'
 
-// gitterapp.com mirrors GitHub Trending — no auth required
-const GITTERAPP_URL = 'https://api.gitterapp.com/repositories?since=daily'
-
-type GitterRepo = {
+type Repo = {
   author: string
   name: string
   url: string
@@ -43,16 +40,7 @@ function daysAgoString(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-async function fetchViaGitterapp(): Promise<GitterRepo[]> {
-  const res = await fetch(GITTERAPP_URL, {
-    headers: { 'User-Agent': 'buildwut/0.1 (personal tool)' },
-    next: { revalidate: 0 },
-  })
-  if (!res.ok) throw new Error(`gitterapp returned ${res.status}`)
-  return res.json() as Promise<GitterRepo[]>
-}
-
-async function fetchViaGithubSearch(): Promise<GitterRepo[]> {
+async function fetchRepos(): Promise<Repo[]> {
   const token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN
   const url = `https://api.github.com/search/repositories?q=stars:>50+created:>${daysAgoString(7)}&sort=stars&order=desc&per_page=25`
   const headers: Record<string, string> = {
@@ -81,16 +69,11 @@ export async function run(): Promise<IngestResult> {
   let itemsIngested = 0
   const today = todayString()
 
-  let repos: GitterRepo[]
+  let repos: Repo[]
   try {
-    repos = await fetchViaGitterapp()
-  } catch (primaryErr) {
-    errors.push(`gitterapp failed (${String(primaryErr)}); falling back to GitHub Search`)
-    try {
-      repos = await fetchViaGithubSearch()
-    } catch (fallbackErr) {
-      return { ok: false, itemsIngested: 0, errors: [...errors, String(fallbackErr)] }
-    }
+    repos = await fetchRepos()
+  } catch (err) {
+    return { ok: false, itemsIngested: 0, errors: [String(err)] }
   }
 
   for (const repo of repos) {

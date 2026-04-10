@@ -31,10 +31,15 @@ Austin is non-technical. He does not write or review code directly. Claude is re
 - [x] Alert management page — `/alerts` with create/toggle/delete
 - [x] In-app notification badge on Alerts nav item
 - [x] Daily email digest — `app/api/cron/digest/route.ts`, 8am daily via Resend
+- [x] Onboarding tour
 - [ ] Deploy and verify end-to-end in production
 
+### Security hardening (2026-04-09)
+- [x] Open redirect fixed — `app/api/auth/callback/route.ts` validates `next` param (relative paths only)
+- [x] RLS policies written — `supabase/migrations/0002_rls_policies.sql`
+- [x] **Apply RLS migration in Supabase SQL Editor** — paste and run `0002_rls_policies.sql` (one-time manual step)
+
 ### Phase 6 (next)
-- Onboarding tour (deferred from Phase 5)
 - See `BUILD_PLAN.md` section 14 for full Phase 6 scope
 
 ---
